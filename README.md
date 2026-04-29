@@ -1,14 +1,24 @@
 # tether
 
-> Telegram bidirectional comms for AI agents. Your agent calls you. You can call back.
+> Bidirectional comms for AI agents. Your agent calls you. You can call back.
 
-`tether` is a tiny Python package + CLI that gives any AI agent — Claude
-Code, the Anthropic Agent SDK, Cursor / Cline plugins, or your own Python
-script — a **two-way** Telegram channel to its operator. Outbound: send
-status, alerts, results. Inbound: receive `/status`, `/abort`, free-form
+`tether` is a tiny Python package + CLI + MCP server that gives any AI agent
+— Claude Code, the Anthropic Agent SDK, Cursor / Cline / Codex plugins, or
+your own Python script — a **two-way** chat channel to its operator. Outbound:
+send status, alerts, results. Inbound: receive `/status`, `/abort`, free-form
 clarifications, course corrections from anywhere.
 
-It's deliberately small (~400 LOC), single-dependency (`requests`), and
+**Transports:**
+- *Telegram* — default (v0.1+)
+- *Slack* — added in v0.3 (Bot Token + Socket Mode)
+- *Discord, SMS, Signal* — on the roadmap
+
+**Integrations:**
+- Plain Python lib (`from tether import Tether`)
+- CLI (`tether send`, `tether daemon`, ...)
+- MCP server — `tether-mcp` (drop into Claude Code / Cursor / Cline / Codex)
+
+It's deliberately small (~500 LOC for Telegram, ~200 for Slack), and
 copy-pasteable. No SaaS, no broker, no daemon you have to babysit. Bring
 your own bot token; tether handles the rest.
 

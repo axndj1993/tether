@@ -7,6 +7,8 @@
 | [API reference](api-reference.md)       | Every Python class, method, and dataclass. |
 | [CLI reference](cli-reference.md)       | Every subcommand, option, and exit code. |
 | [Integrations](integrations.md)         | Claude Code Skill, Anthropic SDK, plain Python, CI sidecar. |
+| [MCP server](mcp.md)                    | **v0.2** — drop tether into Claude Code / Cursor / Cline / Codex as native tools. |
+| [Transports](transports.md)             | **v0.3** — Slack transport setup + the Transport protocol (for adding more backends). |
 | [Recipes](recipes.md)                   | Cookbook: heartbeat, build alerts, Q&A loops, multi-channel fan-out, edit-in-place, etc. |
 | [Architecture](architecture.md)         | What state lives where, polling model, design choices. |
 | [Troubleshooting](troubleshooting.md)   | Common failure modes and their fixes. |
