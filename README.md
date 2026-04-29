@@ -24,13 +24,24 @@ your own bot token; tether handles the rest.
 
 ## Why this exists
 
-Long-running agentic work needs an operator. Today, that operator is
-chained to the terminal where the agent runs: if you walk away from your
-desk, you have no idea what your agent is doing — or even if it's stuck
-waiting on you.
+> Today's meta-challenge: AI agents do real autonomous work now, but
+> the operator UX is desktop-bound. The moment you walk away from your
+> machine, you're blind to what your agents are doing and have no way
+> to redirect them. People work around it by either babysitting the
+> terminal (defeating the point) or checking obsessively (defeating
+> the point AND pulling them out of everything else).
+>
+> Mobile chat solves that. **Every operator already has Telegram or
+> Slack on their phone.** `tether` makes the bridge a one-line
+> install.
 
-Mobile chat solves that. **Every operator already has Telegram on their
-phone.** `tether` makes the bridge a one-line install.
+Full motivation, problem framing, features, and roadmap in
+[**docs/why.md**](docs/why.md).
+
+> *Sibling project:* [`receipts`](https://github.com/axndj1993/receipts) —
+> turn any YouTube video into an evidence audit. Compose the two for
+> mobile-driven agent workflows that audit the content the operator
+> shares.
 
 The opinionated bit: `tether` ships with an explicit "ack-first"
 convention in the docs. When the operator messages the agent, the

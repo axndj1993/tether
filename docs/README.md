@@ -2,6 +2,7 @@
 
 | Page                                    | What's in it |
 |-----------------------------------------|---|
+| [Why tether exists](why.md)             | The agent firehose, problem framing, what tether solves, what it isn't, roadmap. |
 | [Installation](installation.md)         | Install the package, create the Telegram bot, configure tether. |
 | [Quickstart](quickstart.md)             | Five-minute walkthrough: outbound, inbound, and the ack-first loop. |
 | [API reference](api-reference.md)       | Every Python class, method, and dataclass. |
