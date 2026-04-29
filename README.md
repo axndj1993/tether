@@ -1,176 +1,178 @@
 # tether
 
-> Bidirectional comms for AI agents. Your agent calls you. You can call back.
+> Your AI agent calls you. You can call back.
 
-`tether` is a tiny Python package + CLI + MCP server that gives any AI agent
-— Claude Code, the Anthropic Agent SDK, Cursor / Cline / Codex plugins, or
-your own Python script — a **two-way** chat channel to its operator. Outbound:
-send status, alerts, results. Inbound: receive `/status`, `/abort`, free-form
-clarifications, course corrections from anywhere.
+You walk away from your desk for lunch. Ten minutes later your agent
+finishes the build. Or hits a stuck dependency. Or needs a y/n on a
+deploy. You don't know any of it — your terminal is on a screen
+you're not looking at, the AI's working in silence, and "checking
+back" means breaking your real work to remote into the laptop.
 
-**Transports:**
-- *Telegram* — default (v0.1+)
-- *Slack* — added in v0.3 (Bot Token + Socket Mode)
-- *Discord, SMS, Signal* — on the roadmap
+That's the gap `tether` closes. Your agent (Claude Code, Cursor,
+Cline, Codex, Continue, Zed, or your own Python script) gets a
+**two-way Telegram or Slack channel** to your phone. It pings you
+when it has news. You can reply with `/status`, `/abort`, free-form
+clarifications — anywhere, anytime.
 
-**Integrations:**
-- Plain Python lib (`from tether import Tether`)
-- CLI (`tether send`, `tether daemon`, ...)
-- MCP server — `tether-mcp` (drop into Claude Code / Cursor / Cline / Codex)
+```
+[You, on a walk]            [Agent, in your IDE]
+     ↑                              ↓
+     └──────── Telegram / Slack ────┘
+```
 
-It's deliberately small (~500 LOC for Telegram, ~200 for Slack), and
-copy-pasteable. No SaaS, no broker, no daemon you have to babysit. Bring
-your own bot token; tether handles the rest.
+It's ~600 lines of Python, single dependency (`requests`), no SaaS,
+no babysit-daemon. Bring your own bot token; tether handles the
+rest.
 
-## Why this exists
+---
 
-> Today's meta-challenge: AI agents do real autonomous work now, but
-> the operator UX is desktop-bound. The moment you walk away from your
-> machine, you're blind to what your agents are doing and have no way
-> to redirect them. People work around it by either babysitting the
-> terminal (defeating the point) or checking obsessively (defeating
-> the point AND pulling them out of everything else).
->
-> Mobile chat solves that. **Every operator already has Telegram or
-> Slack on their phone.** `tether` makes the bridge a one-line
-> install.
+## What people use it for
 
-Full motivation, problem framing, features, and roadmap in
-[**docs/why.md**](docs/why.md).
+**A solo dev running long jobs:** "kick off a 90-min test suite,
+walk away, get a Telegram ping when it's green or red — with the
+first failing test stack-trace inline if red."
+
+**An ops engineer:** "every deploy step pings the team channel,
+operators reply `/abort` from their phones if the canary metrics
+look wrong."
+
+**A trader running a live agent:** "trade hits stop, agent texts me
+the lifecycle ID + P&L; I can text `/flatten` from my phone to
+override."
+
+**Multiple agents on multiple repos:** [profiles](docs/profiles.md)
+let one machine run 3 agents talking to 3 separate Telegram chats —
+no message collision.
+
+**CI without a SaaS:** `tether send` from a GitHub Actions step is a
+one-liner that beats setting up Slack webhooks.
 
 > *Sibling project:* [`receipts`](https://github.com/axndj1993/receipts) —
-> turn any YouTube video into an evidence audit. Compose the two for
-> mobile-driven agent workflows that audit the content the operator
-> shares.
+> turn any YouTube video into an evidence audit. Compose the two:
+> operator shares a YouTube URL via Telegram → agent audits with
+> receipts → result back via tether. Mobile-driven workflow, ~15
+> lines of agent logic.
 
-The opinionated bit: `tether` ships with an explicit "ack-first"
-convention in the docs. When the operator messages the agent, the
-**first thing the agent sends back is a one-liner ack** ("Got it, on
-it"), THEN it does the work. Sounds trivial; it eliminates the
-"is the AI even reading this?" anxiety that kills async oversight in
-practice.
+---
+
+## What problem this solves
+
+Long-running agentic work needs an operator. Today's agent UIs are
+desktop-bound: the moment you walk away from your machine, you're
+blind to what your agent is doing and have no way to redirect it.
+People work around it by either babysitting the terminal (defeating
+the point of agents) or checking obsessively (defeating the point of
+mobility). Mobile chat solves it: **every operator already has
+Telegram or Slack on their phone** — `tether` makes the bridge a
+one-line install.
+
+Full motivation, problem framing, features, roadmap in
+[**docs/why.md**](docs/why.md).
+
+---
+
+## The opinionated bit: ack-first protocol
+
+When the operator messages the agent, the **first thing the agent
+sends back is a one-liner ack** ("Got it, on it"), THEN it does the
+work, THEN it sends the result. Sounds trivial; in practice it's
+the difference between comfortable async oversight and operator
+anxiety. Without an ack, the operator stares at silence wondering
+whether the message was even received. The ack closes the loop in
+one line.
+
+This convention is baked into the docs and the [Claude Code Skill
+template](examples/claude_code_skill.md) — it's part of what makes
+`tether` a complete UX answer, not just a Telegram wrapper.
+
+---
 
 ## Install
 
 ```bash
-pip install tether
+pip install pager-cli            # core
+pip install 'tether[mcp]'         # + MCP server (Claude Code/Cursor/etc)
+pip install 'tether[slack]'       # + Slack transport
+pip install 'tether[all]'         # everything
 ```
 
-Or, from this repo:
+> Currently shipping under `pager-cli` on PyPI; the CLI command and
+> Python module are both `tether`. Rename incoming when the PyPI
+> namespace is freed.
 
-```bash
-pip install -e .
-```
+## 60-second start
 
-## Quickstart (5 minutes)
-
-1. **Create a Telegram bot.** Open Telegram, message `@BotFather`, run
-   `/newbot`, follow the prompts. You'll get a token like
-   `1234567890:AA...`.
-2. **Find your chat id.** Send the bot any message from your account,
-   then visit
-   `https://api.telegram.org/bot<TOKEN>/getUpdates` — look for
-   `"chat":{"id":<NUMBER>,...}`. Copy the number.
-3. **Configure tether.** Two options:
-
+1. Create a Telegram bot via [@BotFather](https://t.me/BotFather);
+   note the token.
+2. Send your bot any message; visit
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` to find your
+   `chat.id`.
+3. Configure:
    ```bash
-   # Option A — env vars (good for shell scripts / CI)
-   export TELEGRAM_BOT_TOKEN=1234567890:AA...
-   export TELEGRAM_CHAT_ID=987654321
-
-   # Option B — interactive wizard, writes ~/.tether/config.toml (chmod 600)
-   tether init
+   tether init                              # interactive wizard
+   # OR
+   export TELEGRAM_BOT_TOKEN=...
+   export TELEGRAM_CHAT_ID=...
    ```
-
-4. **Try it.**
-
+4. Try it:
    ```bash
-   tether send "hello from tether"
-   tether whoami     # verifies token by calling getMe
+   tether send "*hello* from tether"
+   tether whoami      # confirms bot connected
    ```
+5. Drop into your AI agent host: see the [integrations
+   guide](docs/integrations.md) for explicit per-tool setup
+   (Claude Code, Cursor, Cline, Codex, Continue.dev, Zed).
 
-## CLI usage
-
-```bash
-tether send "Build started"           # one-liner outbound
-tether send "*Bold* and _italic_"      # MarkdownV1 by default
-tether send "raw" --parse-mode none    # plain text
-
-tether daemon --inbox ./inbox.jsonl    # long-poll forever, append each
-                                       # inbound msg to inbox.jsonl
-tether drain  --inbox ./inbox.jsonl    # print unread, advance pointer
-                                       # (pairs with daemon for at-most-once)
-```
-
-## Python usage
+## Python
 
 ```python
 from tether import Tether
 
-p = Tether()                            # reads env vars or ~/.tether/config.toml
-p.send("starting long task")
+t = Tether()                                # auto-resolves profile
+t.send("Build started")                      # outbound
 
-# Long-poll, react to commands
-for msg in p.listen(poll_timeout=30):
+for msg in t.listen(poll_timeout=30):        # inbound
     if msg.text == "/status":
-        p.send(get_status())
+        t.send(get_status())
     elif msg.text == "/abort":
-        p.send("Aborting now.")
+        t.send("Aborting.")
         break
     else:
-        p.send("Got it, on it.")        # ack-first
-        do_the_thing(msg.text)
-        p.send("Done.")
+        t.send(f"Got it: {msg.text!r}")      # ack-first
+        do_work(msg.text)
+        t.send("Done.")
 ```
 
-## Use as a Claude Code Skill
+That's the entire pattern.
 
-`tether` is designed to drop straight into Claude Code as a Skill.
+## What's inside
 
-```markdown
----
-name: tether-comms
-description: Use whenever the operator may step away from the terminal — emit status updates and accept commands via Telegram. Send a one-line ack BEFORE any new operator message's work begins.
----
+| Layer            | What it does |
+|------------------|---|
+| `tether send`    | Outbound: one-line CLI / Python lib for status, alerts, results. |
+| `tether daemon`  | Inbound: long-poll forever; append messages to JSONL for at-most-once consumption by the agent. |
+| `tether-mcp`     | MCP server: drops `tether_send` / `tether_poll` into Claude Code, Cursor, Cline, Codex, etc. as native tools. |
+| `tether profiles`| Multi-bot support: futures-bot pings one channel, code-review pings another. Auto-detected via `.tether` file in CWD. |
 
-# Skill rules
+Transports: **Telegram** (default), **Slack** (Bot Token + Socket
+Mode). Discord / SMS / Signal on the roadmap.
 
-1. On any inbound operator message, immediately send a one-line ack via
-   `tether send "<ack>"` BEFORE starting the requested work.
-2. After completing the work, send the result.
-3. For long-running tasks, send a status update every ~5-10 minutes or
-   on each meaningful state change (build done, test failure, etc).
-4. For binary decisions that need operator input, send the question +
-   wait via `tether drain` until they answer.
-```
+## Documentation
 
-Then in Claude Code: launch a Monitor on `tether_inbox.jsonl` so each new
-operator message wakes Claude near-realtime.
-
-## Architecture
-
-```
-┌─────────────────┐    long-poll    ┌──────────────────┐
-│ tether.client    │  ─────────────► │ Telegram Bot API │
-│  - send()       │  ◄─────────────  │                  │
-│  - poll_once()  │    sendMessage  └──────────────────┘
-│  - listen()     │
-└────────┬────────┘
-         │  offset persisted via tmp+rename
-         ▼
-   ~/.tether/offset.json
-```
-
-- **State**: `~/.tether/offset.json` (next-update pointer, atomic write).
-- **Config resolution**: ctor arg → env var → `~/.tether/config.toml`.
-- **Errors**: `TetherError` (transport/API), `ConfigError` (missing creds).
-
-## Testing
-
-```bash
-pip install -e ".[dev]"
-pytest
-```
+| Page                                    | What's in it |
+|-----------------------------------------|---|
+| [Why tether](docs/why.md)               | Full motivation + roadmap |
+| [Installation](docs/installation.md)    | Bot creation, config, verify |
+| [Quickstart](docs/quickstart.md)        | 5-minute walkthrough |
+| [API reference](docs/api-reference.md)  | Every Python class/method |
+| [CLI reference](docs/cli-reference.md)  | Every subcommand/flag |
+| [Integrations](docs/integrations.md)    | Step-by-step for Claude Code, Cursor, Cline, Codex, Continue.dev, Zed |
+| [MCP server](docs/mcp.md)               | Drop tether into MCP-aware clients as native tools |
+| [Transports](docs/transports.md)        | Slack setup + Transport protocol |
+| [Profiles](docs/profiles.md)            | Multiple bots/chats per machine |
+| [Recipes](docs/recipes.md)              | Heartbeat, build alerts, Q&A loops, multi-channel fan-out, edit-in-place |
+| [Architecture](docs/architecture.md)    | What state lives where, polling model, design choices |
+| [Troubleshooting](docs/troubleshooting.md) | Common failure modes |
 
 ## License
 
