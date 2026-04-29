@@ -29,6 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-cov", "responses>=0.23"]
+mcp = ["mcp>=1.0"]
 
 [project.urls]
 Homepage = "https://github.com/axndj1993/tether"
@@ -36,6 +37,7 @@ Issues = "https://github.com/axndj1993/tether/issues"
 
 [project.scripts]
 tether = "tether.cli:main"
+tether-mcp = "tether.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
