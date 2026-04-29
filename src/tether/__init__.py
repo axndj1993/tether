@@ -34,4 +34,4 @@ __all__ = [
     "Tether", "Message", "TetherError", "ConfigError",
     "Transport", "TransportMessage", "SlackTransport", "make_transport",
 ]
-__version__ = "0.3.0"
+__version__ = "0.4.0"

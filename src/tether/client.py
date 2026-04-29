@@ -92,18 +92,39 @@ class Tether:
         state_dir: Path | str | None = None,
         api_base: str = DEFAULT_API_BASE,
         session: requests.Session | None = None,
+        profile: str | None = None,
     ) -> None:
-        self.bot_token = bot_token or self._resolve("bot_token", "TELEGRAM_BOT_TOKEN")
-        self.chat_id = chat_id or self._resolve("chat_id", "TELEGRAM_CHAT_ID")
+        # ---- Profile resolution (v0.4) ----------------------------------
+        # If the caller didn't pass explicit token/chat creds, try to
+        # resolve a profile and load its config. Backward-compatible:
+        # v0.3 users with TELEGRAM_BOT_TOKEN env or a flat
+        # ~/.tether/config.toml continue to work via the 'default'
+        # profile fallback.
+        from .profiles import (resolve_profile, load_profile_config,
+                                profile_dir as _profile_dir)
+        prof = resolve_profile(explicit=profile)
+        self.profile_name = prof.name
+        prof_cfg = load_profile_config(prof.name)
+
+        self.bot_token = (bot_token
+                           or os.environ.get("TELEGRAM_BOT_TOKEN")
+                           or prof_cfg.get("bot_token"))
+        self.chat_id = (chat_id
+                         if chat_id is not None
+                         else (os.environ.get("TELEGRAM_CHAT_ID")
+                               or prof_cfg.get("chat_id")))
+
         if not self.bot_token:
             raise ConfigError(
-                "No bot token. Set $TELEGRAM_BOT_TOKEN or pass bot_token=. "
-                "Run `tether init` to set up config interactively."
+                f"No bot token (profile={prof.name!r}, source={prof.source}). "
+                "Set $TELEGRAM_BOT_TOKEN or pass bot_token=, "
+                f"or run `tether init --profile {prof.name}` to set up."
             )
         if self.chat_id is None:
             raise ConfigError(
-                "No chat id. Set $TELEGRAM_CHAT_ID or pass chat_id=. "
-                "Run `tether init` to set up config interactively."
+                f"No chat id (profile={prof.name!r}, source={prof.source}). "
+                "Set $TELEGRAM_CHAT_ID or pass chat_id=, "
+                f"or run `tether init --profile {prof.name}` to set up."
             )
         try:
             self.chat_id = int(self.chat_id)
@@ -112,13 +133,22 @@ class Tether:
 
         self.api_base = api_base.rstrip("/")
         self._session = session or requests.Session()
-        self.state_dir = Path(state_dir) if state_dir else DEFAULT_STATE_DIR
+        # Per-profile state dir. Explicit `state_dir=` override wins
+        # (used by tests). Otherwise: profile-specific subdir under
+        # ~/.tether/profiles/<name>/.
+        if state_dir is not None:
+            self.state_dir = Path(state_dir)
+        else:
+            self.state_dir = _profile_dir(prof.name)
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self._offset_path = self.state_dir / "offset.json"
 
-    # ----------------- config resolution -----------------
+    # ----------------- config resolution (legacy helper) -----------------
     @staticmethod
     def _resolve(toml_key: str, env_key: str) -> str | None:
+        """Legacy v0.1-v0.3 resolver. Kept for any external code that
+        was poking at this private method. New code should use the
+        profiles module instead."""
         env = os.environ.get(env_key)
         if env:
             return env
