@@ -26,7 +26,45 @@ rest.
 
 ---
 
-## What people use it for
+## The headline use case: operate Claude Code from your phone
+
+This is what `tether` was built for. Install the MCP server, point
+your Claude Code session at it, and you get a fully bidirectional
+mobile interface to your AI coding agent:
+
+```
+You (in Telegram, on a walk):
+  "What's the status?"
+  "Audit https://youtu.be/abc"
+  "Run the test suite"
+  "Show me the diff for the auth refactor"
+  "/abort"
+
+Claude Code (running at your desk, replies via Telegram):
+  → Reads your message via tether_poll
+  → Acks immediately: "Got it, on it."
+  → Does the work (runs tests, edits code, calls other tools)
+  → Replies with the result + key details
+```
+
+You're not "checking on" Claude. You're *driving* it from your
+phone. Code edits, test runs, audits, deploys, research — all
+operator-facing work flows through Telegram.
+
+This pattern is field-tested: the entire `tether` repo + its sibling
+[`receipts`](https://github.com/axndj1993/receipts) were built over
+a 14-hour session where the operator drove Claude Code *exclusively*
+from Telegram (laptop closed by hour 6). Every commit, every code
+review, every backtest — driven by phone messages, results streamed
+back as one-line summaries.
+
+The opinionated [ack-first](#the-opinionated-bit-ack-first-protocol)
+protocol makes it actually comfortable instead of just possible.
+
+Setup is two lines in `.claude/mcp.json` — see the [integrations
+guide](docs/integrations.md#claude-code).
+
+## Other use cases
 
 **A solo dev running long jobs:** "kick off a 90-min test suite,
 walk away, get a Telegram ping when it's green or red — with the
