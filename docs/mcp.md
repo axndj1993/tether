@@ -117,6 +117,15 @@ loop:
 This is the same convention as the [Skill template](../examples/claude_code_skill.md);
 it just happens via MCP tools instead of CLI subprocess.
 
+**Channel-routing rule.** The ack-first protocol applies ONLY to
+messages that arrived via `tether_poll` (i.e. via Telegram or Slack).
+If the agent also has a terminal where the operator types directly,
+those terminal messages should be replied to in the terminal — *not*
+acked via `tether_send`. Cross-piping phone-buzzes the operator for
+messages they typed at the desk, and splits the conversation across
+two surfaces that no longer line up. Rule of thumb: **reply on the
+channel the message arrived from.**
+
 ## Bidirectional usage with the daemon
 
 Some patterns (e.g. running the daemon to log all inbound to a JSONL

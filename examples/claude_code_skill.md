@@ -17,9 +17,10 @@ terminal.
 
 ## Rules Claude must follow
 
-### 1. Ack-first on inbound messages
+### 1. Ack-first on inbound messages — *Telegram inbound only*
 
-When a new operator message lands in `tether_inbox.jsonl`, the **first
+When a new operator message lands in `tether_inbox.jsonl` (i.e. the
+operator messaged the agent via Telegram / Slack), the **first
 action** in Claude's response is a one-line ack:
 
 ```bash
@@ -31,6 +32,15 @@ Then do the work. Then send the result.
 **Why:** the operator can't see Claude's terminal spinner. Without an
 explicit ack, they don't know if the message was received or if Claude
 is already working. The ack eliminates that ambiguity in one line.
+
+**Important — channel-routing rule.** This protocol applies *only* to
+messages received via `tether_poll` / the inbox JSONL. **If the
+operator types directly in the terminal where Claude is running, reply
+in the terminal — do NOT send a Telegram ack for terminal messages.**
+Cross-piping the channels phone-buzzes the operator for messages they
+typed at their desk, and splits the conversation across two surfaces
+that no longer line up. Rule of thumb: **reply on the channel the
+message arrived from.**
 
 ### 2. Dual-deliver important findings
 
