@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tether"
-version = "0.1.0"
-description = "Telegram bidirectional comms for AI agents — your agent calls you, you can call back."
+version = "0.3.0"
+description = "Bidirectional comms for AI agents (Telegram + Slack). Your agent calls you, you can call back."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -30,6 +30,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-cov", "responses>=0.23"]
 mcp = ["mcp>=1.0"]
+slack = ["slack-sdk>=3.20"]
+all = ["mcp>=1.0", "slack-sdk>=3.20"]
 
 [project.urls]
 Homepage = "https://github.com/axndj1993/tether"

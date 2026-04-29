@@ -28,6 +28,10 @@ CLI:
 from __future__ import annotations
 
 from .client import Tether, Message, TetherError, ConfigError
+from .transports import Transport, TransportMessage, SlackTransport, make_transport
 
-__all__ = ["Tether", "Message", "TetherError", "ConfigError"]
-__version__ = "0.1.0"
+__all__ = [
+    "Tether", "Message", "TetherError", "ConfigError",
+    "Transport", "TransportMessage", "SlackTransport", "make_transport",
+]
+__version__ = "0.3.0"
