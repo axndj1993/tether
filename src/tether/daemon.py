@@ -39,7 +39,16 @@ def run_daemon(
             with out.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
             if print_to_stdout:
-                print(line, flush=True)
+                # Best-effort: detached daemons have no attached TTY, so
+                # `print` can raise BrokenPipeError / OSError. The JSONL
+                # append above is the durable channel; stdout is only
+                # the live Monitor notifier and is allowed to fail
+                # silently. Without this guard a broken stdout would
+                # propagate out of the loop and kill the daemon.
+                try:
+                    print(line, flush=True)
+                except (BrokenPipeError, OSError, ValueError):
+                    pass
     except KeyboardInterrupt:
         print("[tether] daemon stopped via SIGINT", file=sys.stderr)
         return 0

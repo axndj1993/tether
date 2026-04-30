@@ -42,8 +42,8 @@ def _cmd_drain(args: argparse.Namespace) -> int:
 
 
 def _cmd_daemon(args: argparse.Namespace) -> int:
-    pager = Tether(profile=args.profile)
-    return run_daemon(out_path=args.inbox, pager=pager,
+    tether = Tether(profile=args.profile)
+    return run_daemon(out_path=args.inbox, tether=tether,
                       poll_timeout=args.poll_timeout)
 
 
