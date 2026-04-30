@@ -23,6 +23,7 @@ from . import __version__
 from .client import ConfigError, Tether, TetherError, DEFAULT_STATE_DIR
 from .daemon import drain, run_daemon
 from . import profiles as _profiles
+from . import install as _install
 
 
 def _add_profile_arg(parser: argparse.ArgumentParser) -> None:
@@ -54,25 +55,59 @@ def _cmd_whoami(args: argparse.Namespace) -> int:
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
-    """Interactive config wizard. Writes a profile config + verifies."""
+    """Interactive config wizard with chat-id auto-detection.
+
+    Replaces the manual 'visit getUpdates URL, find chat.id' step
+    that's the biggest friction point in tether's onboarding. After
+    the user pastes their bot token, the wizard prompts them to DM
+    the bot, then auto-detects the chat id via Telegram getUpdates.
+
+    With `--install <client>` (e.g. claude-code), also writes the
+    host's MCP config in the same wizard pass — replacing the manual
+    JSON edit.
+    """
     profile_name = args.profile or _profiles.DEFAULT_PROFILE_NAME
-    print(f"tether config wizard — profile: {profile_name!r}")
+    print(f"tether setup wizard — profile: {profile_name!r}")
     print()
-    print("1. Create a Telegram bot via @BotFather on Telegram, get the token.")
-    print("2. Send the bot any message from your account, then visit:")
-    print("   https://api.telegram.org/bot<TOKEN>/getUpdates")
-    print("   to find your chat id (look for 'chat':{'id':...}).")
+    print("Step 1 of 3: Bot token.")
+    print("  Open Telegram, message @BotFather, run /newbot.")
+    print("  Paste the token below.")
     print()
     token = input("Bot token: ").strip()
-    chat_id = input("Chat id (numeric): ").strip()
-    if not token or not chat_id:
-        print("aborted: empty input", file=sys.stderr)
+    if not token:
+        print("aborted: empty token", file=sys.stderr)
         return 1
-    try:
-        chat_id_int = int(chat_id)
-    except ValueError:
-        print(f"aborted: chat id must be int, got {chat_id!r}", file=sys.stderr)
-        return 1
+
+    chat_id_int: int | None
+    if args.chat_id is not None:
+        # Operator passed --chat-id explicitly; skip auto-detect.
+        try:
+            chat_id_int = int(args.chat_id)
+        except ValueError:
+            print(f"--chat-id must be an integer, got {args.chat_id!r}",
+                  file=sys.stderr)
+            return 1
+    else:
+        print()
+        print("Step 2 of 3: Chat id.")
+        print("  Now open Telegram, search for your bot by username,")
+        print("  and send it ANY message (e.g. /start). Don't close")
+        print("  this terminal.")
+        print()
+        print("  Waiting up to 60 seconds for your message... ", end="",
+              flush=True)
+        chat_id_int = _install.auto_detect_chat_id(token, timeout_s=60)
+        if chat_id_int is None:
+            print()
+            print("(timeout — no message received)", file=sys.stderr)
+            print(
+                "Fallback: visit "
+                f"https://api.telegram.org/bot{token[:8]}.../getUpdates "
+                "in a browser, find chat.id, and re-run with --chat-id N",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"detected chat_id={chat_id_int}")
 
     cfg_path = _profiles.write_profile_config(
         profile_name,
@@ -80,20 +115,70 @@ def _cmd_init(args: argparse.Namespace) -> int:
          "bot_token": token,
          "chat_id": chat_id_int},
     )
-    print(f"\nWrote {cfg_path}")
-    print("Verifying with getMe...")
+    print()
+    print(f"Wrote profile config: {cfg_path}")
+
+    print()
+    print("Step 3 of 3: Verifying with Telegram getMe...")
     try:
         info = Tether(profile=profile_name).whoami()
         print(f"OK — connected as bot @{info.get('username')!r}")
     except TetherError as e:
         print(f"WARN: getMe failed: {e}", file=sys.stderr)
         return 1
+
+    # Optional: auto-install into a host's MCP config.
+    if args.install:
+        client = args.install
+        try:
+            written = _install.install(
+                client, profile=profile_name,
+                inline_creds=args.inline_creds,
+            )
+        except SystemExit as e:
+            print(f"install failed: {e}", file=sys.stderr)
+            return 1
+        spec = _install.CLIENTS[client]
+        print()
+        print(f"Wrote {spec.name} MCP config: {written}")
+        print(f"Restart {spec.name} to pick up the new server.")
+        return 0
+
     if profile_name != _profiles.DEFAULT_PROFILE_NAME:
         print(
             f"\nTo make this profile auto-active in the current dir, run:"
             f"\n    tether profiles use {profile_name}"
         )
-    print(f'\nTry it: tether --profile {profile_name} send "hello"')
+    print()
+    print('Setup complete. Try it: tether send "hello"')
+    print()
+    print("Next: install into your AI client with one command, e.g.:")
+    print("    tether install claude-code")
+    print("    tether install cursor")
+    print("    tether install codex")
+    return 0
+
+
+def _cmd_install(args: argparse.Namespace) -> int:
+    """Auto-write tether's MCP server block into a host's config.
+
+    Replaces the manual 'edit .claude/mcp.json' step. Locates the
+    right config file for the chosen host, preserves any existing
+    servers, adds (or replaces) the `tether` block.
+    """
+    profile_name = args.profile or _profiles.resolve_profile().name
+    try:
+        written = _install.install(
+            args.client, profile=profile_name,
+            inline_creds=args.inline_creds,
+        )
+    except SystemExit as e:
+        print(f"install failed: {e}", file=sys.stderr)
+        return 1
+    spec = _install.CLIENTS[args.client]
+    print(f"Wrote {spec.name} MCP config: {written}")
+    print(f"Profile pinned: {profile_name}")
+    print(f"Restart {spec.name} to pick up the new server.")
     return 0
 
 
@@ -182,9 +267,37 @@ def main(argv: list[str] | None = None) -> int:
                          help="consumed-pointer file (default <inbox>.consumed.json)")
     p_drain.set_defaults(func=_cmd_drain)
 
-    p_init = sub.add_parser("init", help="interactive config wizard")
+    p_init = sub.add_parser("init",
+                              help="interactive setup wizard (auto-detects chat id)")
     _add_profile_arg(p_init)
+    p_init.add_argument("--chat-id", default=None,
+                        help="explicit chat id (skips auto-detection)")
+    p_init.add_argument(
+        "--install", default=None,
+        choices=list(_install.CLIENTS.keys()),
+        help="also auto-install MCP config into this AI agent host",
+    )
+    p_init.add_argument("--inline-creds", action="store_true",
+                        help="embed bot token + chat id in the host's MCP "
+                             "config (default: pin TETHER_PROFILE only)")
     p_init.set_defaults(func=_cmd_init)
+
+    p_install = sub.add_parser(
+        "install",
+        help="auto-write tether's MCP block into an AI host's config",
+    )
+    p_install.add_argument(
+        "client",
+        choices=list(_install.CLIENTS.keys()),
+        help="AI agent host (claude-code/cursor/cline/codex/continue/zed)",
+    )
+    _add_profile_arg(p_install)
+    p_install.add_argument(
+        "--inline-creds", action="store_true",
+        help="embed bot token + chat id in the host's MCP config "
+             "(default: pin TETHER_PROFILE only)",
+    )
+    p_install.set_defaults(func=_cmd_install)
 
     p_who = sub.add_parser("whoami", help="verify token via getMe")
     _add_profile_arg(p_who)

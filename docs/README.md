@@ -3,6 +3,7 @@
 | Page                                    | What's in it |
 |-----------------------------------------|---|
 | [Why tether exists](why.md)             | The agent firehose, problem framing, what tether solves, what it isn't, roadmap. |
+| [Onboarding](onboarding.md)             | **v0.5** — three-command setup. Wizard auto-detects chat id + auto-writes MCP host config. |
 | [Installation](installation.md)         | Install the package, create the Telegram bot, configure tether. |
 | [Quickstart](quickstart.md)             | Five-minute walkthrough: outbound, inbound, and the ack-first loop. |
 | [API reference](api-reference.md)       | Every Python class, method, and dataclass. |
