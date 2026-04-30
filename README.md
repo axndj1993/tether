@@ -20,9 +20,9 @@ clarifications — anywhere, anytime.
      └──────── Telegram / Slack ────┘
 ```
 
-It's ~600 lines of Python, single dependency (`requests`), no SaaS,
-no babysit-daemon. Bring your own bot token; tether handles the
-rest.
+Lightweight Python (`requests` is the only runtime dep on 3.11+),
+no SaaS, no babysit-daemon. Bring your own bot token; tether handles
+the rest.
 
 ---
 
@@ -127,16 +127,21 @@ template](examples/claude_code_skill.md) — it's part of what makes
 
 ## Install
 
+The recommended install is from GitHub — that's where the current
+v0.6.x line lives (Claude Code hooks, MCP server, `tether install`
+auto-config, `/tether arm` slash command, etc):
+
 ```bash
-pip install pager-cli            # core
-pip install 'tether[mcp]'         # + MCP server (Claude Code/Cursor/etc)
-pip install 'tether[slack]'       # + Slack transport
-pip install 'tether[all]'         # everything
+pip install 'tether[all] @ git+https://github.com/axndj1993/tether'
+# or scoped:
+pip install 'tether[mcp] @ git+https://github.com/axndj1993/tether'   # + MCP server
+pip install 'tether[slack] @ git+https://github.com/axndj1993/tether' # + Slack transport
 ```
 
-> Currently shipping under `pager-cli` on PyPI; the CLI command and
-> Python module are both `tether`. Rename incoming when the PyPI
-> namespace is freed.
+> A legacy v0.2 also exists on PyPI under the name `pager-cli`
+> (`pip install pager-cli`). It pre-dates the MCP server, Claude Code
+> integration, and onboarding wizard — pin to GitHub for current
+> features. PyPI rename to `tether` pending namespace availability.
 
 ## 60-second start
 
@@ -185,12 +190,14 @@ That's the entire pattern.
 
 ## What's inside
 
-| Layer            | What it does |
-|------------------|---|
-| `tether send`    | Outbound: one-line CLI / Python lib for status, alerts, results. |
-| `tether daemon`  | Inbound: long-poll forever; append messages to JSONL for at-most-once consumption by the agent. |
-| `tether-mcp`     | MCP server: drops `tether_send` / `tether_poll` into Claude Code, Cursor, Cline, Codex, etc. as native tools. |
-| `tether profiles`| Multi-bot support: futures-bot pings one channel, code-review pings another. Auto-detected via `.tether` file in CWD. |
+| Layer             | What it does |
+|-------------------|---|
+| `tether send`     | Outbound: one-line CLI / Python lib for status, alerts, results. |
+| `tether daemon`   | Inbound: long-poll forever; append messages to JSONL for at-most-once consumption by the agent. |
+| `tether init`     | Interactive setup wizard: walks token + chat-id config, optionally auto-installs into your AI host. |
+| `tether install`  | Auto-writes tether's MCP config (and Claude Code hooks + `/tether arm` slash command) into Claude Code / Cursor / Cline / Codex / Continue / Zed. |
+| `tether-mcp`      | MCP server: drops `tether_send` / `tether_poll` into Claude Code, Cursor, Cline, Codex, etc. as native tools. |
+| `tether profiles` | Multi-bot support: futures-bot pings one channel, code-review pings another. Auto-detected via `.tether` file in CWD. |
 
 Transports: **Telegram** (default), **Slack** (Bot Token + Socket
 Mode). Discord / SMS / Signal on the roadmap.
