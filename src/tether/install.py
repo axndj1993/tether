@@ -301,12 +301,15 @@ def install_claude_code_hooks(
     consumed_path: str = "tether_inbox.consumed.json",
     settings_filename: str = "settings.json",
 ) -> Path:
-    """Wire Stop + UserPromptSubmit hooks into Claude Code settings.
+    """Wire Stop + UserPromptSubmit + SessionStart hooks into Claude Code.
 
-    Adds (or replaces) two hooks that run
+    Adds (or replaces) three hooks that run
     `python -m tether.hooks.inbox_drain` to drain unread Telegram
-    messages at end-of-turn (Stop) and before the next user prompt
-    (UserPromptSubmit). Idempotent: re-runs replace any prior
+    messages at end-of-turn (Stop), before the next user prompt
+    (UserPromptSubmit), and at session start (SessionStart, v0.6.1+).
+    The SessionStart entry instructs Claude to spawn a Monitor on
+    `tether.hooks.inbox_tail` so messages arriving during idle wake
+    the session immediately. Idempotent: re-runs replace any prior
     tether-managed entries (identified by the command substring
     `tether.hooks.inbox_drain`) and preserve unrelated hooks.
 
@@ -352,7 +355,7 @@ def install_claude_code_hooks(
         f'--consumed "{consumed_path}"'
     )
 
-    for event in ("Stop", "UserPromptSubmit"):
+    for event in ("Stop", "UserPromptSubmit", "SessionStart"):
         existing = hooks_block.get(event, [])
         kept_groups: list[dict] = []
         if isinstance(existing, list):

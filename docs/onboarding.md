@@ -180,17 +180,44 @@ You can also pin to `settings.local.json` instead of the shared
 tether install claude-code --settings-filename settings.local.json
 ```
 
-### Important limitation
+### Idle-wake via Monitor + SessionStart (v0.6.1+)
 
-Hooks only fire while a Claude Code session is alive. If you message
-your bot when **no Claude session is running**, nothing wakes it —
-the message just sits in the inbox until you start `claude` again
-(at which point the `UserPromptSubmit` hook drains it on your first
-prompt). For true 24/7 wake, run a `/loop` polling pattern alongside
-the hook, or invoke Claude from your runtime when a message arrives.
+The `Stop` and `UserPromptSubmit` hooks only fire at **turn
+boundaries** — not while Claude is sitting idle waiting for the
+operator to type. So a Telegram message arriving during idle would
+sit in the inbox until the next prompt or response.
 
-The hook is the right answer for "Claude is running locally and the
-operator wants two-way comms" — which is the 90% case for
+v0.6.1 closes that gap with a third hook, `SessionStart`. On every
+new Claude Code session it emits an `additionalContext` directive
+that tells Claude to invoke its `Monitor` tool on a long-running
+tail of the inbox JSONL:
+
+```
+python -m tether.hooks.inbox_tail --inbox <inbox_path>
+```
+
+The tail process polls the inbox file every second; each new line
+becomes a stdout event, which Claude Code surfaces as an
+in-conversation notification. That wakes the agent mid-idle, with
+sub-second latency, for the lifetime of the session. Stop and
+UserPromptSubmit still run in parallel — Monitor is purely additive
+and only fills the idle window.
+
+`tether install claude-code` writes all three hook entries
+automatically. No extra flags required.
+
+### Still a limitation: cold start
+
+If you message your bot when **no Claude session is running at all**,
+nothing wakes it — the message just sits in the inbox until you start
+`claude` again (at which point the `UserPromptSubmit` hook drains it
+on your first prompt, and the `SessionStart` hook arms Monitor for
+the next idle window). For true 24/7 wake, run a `/loop` polling
+pattern alongside the hooks, or invoke Claude from your runtime when
+a message arrives.
+
+The hooks are the right answer for "Claude is running locally and
+the operator wants two-way comms" — which is the 90% case for
 agent-assisted dev.
 
 ## Comparison: v0.4 → v0.5 onboarding

@@ -1,7 +1,7 @@
 """Claude Code hook: drain Telegram inbox at turn boundaries.
 
 Wired by `tether install claude-code` into the project's
-`.claude/settings.json`. Two events:
+`.claude/settings.json`. Three events:
 
   - **Stop**: fires after a Claude turn. If unread Telegram messages
     arrived during the turn, the hook outputs `decision: block` so
@@ -11,12 +11,16 @@ Wired by `tether install claude-code` into the project's
     prompt. Hook prepends any unread Telegram messages as additional
     context, so Claude sees them alongside the new prompt.
 
-Why both? The Stop hook handles "messages arrived during my turn",
-UserPromptSubmit handles "messages arrived between turns and operator
-just typed something else" — together they cover the full
-Claude-is-alive surface area. (Idle wake when Claude is *not* running
-is a separate problem — use a `/loop` polling loop or run `tether
-daemon` + `tether drain` periodically.)
+  - **SessionStart** (v0.6.1+): fires once per session. Emits
+    additionalContext directing Claude to invoke the Monitor tool on
+    `tether.hooks.inbox_tail`, so new Telegram messages wake the
+    session even during idle (between turns).
+
+Together these cover the full Claude-is-alive surface area:
+Stop = "during my turn", UserPromptSubmit = "between turns",
+SessionStart + Monitor = "during idle". (Idle wake when Claude is
+*not* running at all is a separate problem — use a `/loop` polling
+loop or run `tether daemon` + `tether drain` periodically.)
 
 Robust to two on-disk consumed-pointer formats:
   - `{"update_id": N}` — tether's native daemon format
@@ -113,8 +117,11 @@ def main(argv: list[str] | None = None) -> int:
         prog="tether.hooks.inbox_drain",
         description="Drain Telegram inbox at Claude turn boundaries.",
     )
-    p.add_argument("--event", choices=["Stop", "UserPromptSubmit"],
-                   required=True)
+    p.add_argument(
+        "--event",
+        choices=["Stop", "UserPromptSubmit", "SessionStart"],
+        required=True,
+    )
     p.add_argument("--inbox", required=True,
                    help="path to telegram inbox jsonl")
     p.add_argument("--consumed", required=True,
@@ -123,6 +130,41 @@ def main(argv: list[str] | None = None) -> int:
 
     inbox = Path(args.inbox)
     consumed = Path(args.consumed)
+
+    if args.event == "SessionStart":
+        # SessionStart fires once per session. We don't drain the inbox
+        # here (the next UserPromptSubmit will). Instead we emit an
+        # additionalContext directive that tells Claude to spawn a
+        # Monitor on the inbox-tail script, so new messages wake the
+        # session even during idle. Without this, messages arriving
+        # between turns sit in the inbox until the operator types.
+        py = sys.executable.replace("\\", "/")
+        inbox_arg = str(inbox).replace("\\", "/")
+        tail_cmd = (
+            f'"{py}" -m tether.hooks.inbox_tail --inbox "{inbox_arg}"'
+        )
+        out = {
+            "continue": True,
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": (
+                    "Tether two-way comms (v0.6.1+): to receive Telegram "
+                    "messages while idle (between operator prompts), "
+                    "invoke the Monitor tool ONCE this session with these "
+                    "exact parameters — `command`: " + tail_cmd + " — "
+                    "`description`: tether telegram inbox tail — "
+                    "`persistent`: true — `timeout_ms`: 3600000. Each "
+                    "stdout line is one new Telegram message and will "
+                    "wake you mid-idle. The Stop and UserPromptSubmit "
+                    "hooks still run in parallel; Monitor is purely "
+                    "additive to close the idle-wake gap. Skip this "
+                    "step if a Monitor with the same command is already "
+                    "running for this session."
+                ),
+            },
+        }
+        sys.stdout.write(json.dumps(out))
+        return 0
 
     try:
         unread, new_consumed = find_unread(inbox, consumed)

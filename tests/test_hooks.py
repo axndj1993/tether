@@ -341,3 +341,119 @@ def test_install_hooks_settings_local_filename(tmp_path: Path) -> None:
     )
     assert written.name == "settings.local.json"
     assert written.exists()
+
+
+# ---------------------------------------------------------------------------
+# SessionStart event (v0.6.1+) — emits Monitor directive, never drains
+# ---------------------------------------------------------------------------
+def test_main_session_start_emits_monitor_directive(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    inbox = tmp_path / "inbox.jsonl"
+    inbox.write_text(
+        json.dumps({"telegram_msg_id": 1, "from_user": "Op", "text": "hi"})
+        + "\n",
+        encoding="utf-8",
+    )
+    consumed = tmp_path / "consumed.json"
+
+    rc = inbox_drain_main([
+        "--event", "SessionStart",
+        "--inbox", str(inbox),
+        "--consumed", str(consumed),
+    ])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["continue"] is True
+    hook_out = out["hookSpecificOutput"]
+    assert hook_out["hookEventName"] == "SessionStart"
+    ctx = hook_out["additionalContext"]
+    # The directive must name the Monitor tool and the tail module so
+    # Claude knows what to invoke.
+    assert "Monitor" in ctx
+    assert "tether.hooks.inbox_tail" in ctx
+    # The inbox path must be threaded through the directive.
+    assert "inbox.jsonl" in ctx
+    # SessionStart MUST NOT advance the consumed pointer — the existing
+    # UserPromptSubmit hook will deliver the existing message on the
+    # operator's first prompt, so the directive is purely additive.
+    assert not consumed.exists()
+
+
+def test_main_session_start_works_with_missing_inbox(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Fresh repo where the inbox JSONL doesn't yet exist."""
+    rc = inbox_drain_main([
+        "--event", "SessionStart",
+        "--inbox", str(tmp_path / "nope.jsonl"),
+        "--consumed", str(tmp_path / "nope.consumed.json"),
+    ])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["continue"] is True
+    assert out["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+
+
+def test_install_hooks_creates_session_start_entry(tmp_path: Path) -> None:
+    install_claude_code_hooks(project_root=tmp_path)
+    data = json.loads(
+        (tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8")
+    )
+    assert "SessionStart" in data["hooks"]
+    cmd = data["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+    assert "tether.hooks.inbox_drain" in cmd
+    assert "--event SessionStart" in cmd
+
+
+def test_install_hooks_idempotent_replaces_session_start_entry(
+    tmp_path: Path,
+) -> None:
+    install_claude_code_hooks(
+        project_root=tmp_path,
+        inbox_path="old_inbox.jsonl",
+        consumed_path="old.consumed.json",
+    )
+    install_claude_code_hooks(
+        project_root=tmp_path,
+        inbox_path="new_inbox.jsonl",
+        consumed_path="new.consumed.json",
+    )
+    data = json.loads(
+        (tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8")
+    )
+    ss_cmds = [
+        h["command"]
+        for grp in data["hooks"]["SessionStart"]
+        for h in grp.get("hooks", [])
+    ]
+    tether_cmds = [c for c in ss_cmds if "tether.hooks.inbox_drain" in c]
+    assert len(tether_cmds) == 1
+    assert "new_inbox.jsonl" in tether_cmds[0]
+    assert "old_inbox.jsonl" not in tether_cmds[0]
+
+
+def test_install_hooks_preserves_unrelated_session_start_entry(
+    tmp_path: Path,
+) -> None:
+    settings_dir = tmp_path / ".claude"
+    settings_dir.mkdir()
+    (settings_dir / "settings.json").write_text(json.dumps({
+        "hooks": {
+            "SessionStart": [
+                {"hooks": [{"type": "command", "command": "echo other"}]}
+            ]
+        }
+    }), encoding="utf-8")
+
+    install_claude_code_hooks(project_root=tmp_path)
+    data = json.loads(
+        (settings_dir / "settings.json").read_text(encoding="utf-8")
+    )
+    cmds = [
+        h["command"]
+        for grp in data["hooks"]["SessionStart"]
+        for h in grp.get("hooks", [])
+    ]
+    assert "echo other" in cmds
+    assert any("tether.hooks.inbox_drain" in c for c in cmds)
