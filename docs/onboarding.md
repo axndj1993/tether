@@ -180,7 +180,7 @@ You can also pin to `settings.local.json` instead of the shared
 tether install claude-code --settings-filename settings.local.json
 ```
 
-### Idle-wake via Monitor + SessionStart (v0.6.1+)
+### Idle-wake via Monitor + SessionStart (v0.6.1+, hardened in v0.6.2)
 
 The `Stop` and `UserPromptSubmit` hooks only fire at **turn
 boundaries** — not while Claude is sitting idle waiting for the
@@ -191,6 +191,14 @@ v0.6.1 closes that gap with a third hook, `SessionStart`. On every
 new Claude Code session it emits an `additionalContext` directive
 that tells Claude to invoke its `Monitor` tool on a long-running
 tail of the inbox JSONL:
+
+> **v0.6.2 hardening.** The directive now leads with `MANDATORY
+> FIRST ACTION` and explicit `BEFORE ANY OTHER TOOL CALL OR REPLY`
+> framing. The original v0.6.1 wording was too soft — operators
+> reported sessions where Claude treated the directive as
+> informational and waited to be reminded. The reword makes the
+> imperative unmistakable; you should never have to ask Claude to
+> arm the Monitor.
 
 ```
 python -m tether.hooks.inbox_tail --inbox <inbox_path>

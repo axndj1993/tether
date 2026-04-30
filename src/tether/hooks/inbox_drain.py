@@ -148,18 +148,20 @@ def main(argv: list[str] | None = None) -> int:
             "hookSpecificOutput": {
                 "hookEventName": "SessionStart",
                 "additionalContext": (
-                    "Tether two-way comms (v0.6.1+): to receive Telegram "
-                    "messages while idle (between operator prompts), "
-                    "invoke the Monitor tool ONCE this session with these "
-                    "exact parameters — `command`: " + tail_cmd + " — "
-                    "`description`: tether telegram inbox tail — "
-                    "`persistent`: true — `timeout_ms`: 3600000. Each "
+                    "MANDATORY FIRST ACTION (tether v0.6.2+ idle-wake): "
+                    "BEFORE ANY OTHER TOOL CALL OR REPLY TO THE OPERATOR, "
+                    "invoke the Monitor tool with these exact parameters "
+                    "— `command`: " + tail_cmd + " — `description`: "
+                    "tether telegram inbox tail — `persistent`: true — "
+                    "`timeout_ms`: 3600000. This is required: without "
+                    "this Monitor, Telegram messages sent while you are "
+                    "idle (between operator prompts) will not reach you, "
+                    "defeating the entire v0.6.1+ idle-wake design. Each "
                     "stdout line is one new Telegram message and will "
-                    "wake you mid-idle. The Stop and UserPromptSubmit "
-                    "hooks still run in parallel; Monitor is purely "
-                    "additive to close the idle-wake gap. Skip this "
-                    "step if a Monitor with the same command is already "
-                    "running for this session."
+                    "wake you mid-idle. Do this now — do not wait for "
+                    "the operator to ask. Skip ONLY if a Monitor with "
+                    "the identical command is already running for this "
+                    "session."
                 ),
             },
         }
