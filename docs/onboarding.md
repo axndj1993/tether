@@ -129,6 +129,70 @@ hosts. Want to add one? PRs welcome — see
 [`src/tether/install.py`](../src/tether/install.py) for the
 `CLIENTS` dict.
 
+## Two-way comms via turn-boundary hooks (v0.6+)
+
+By default, `tether install claude-code` (and `tether init --install
+claude-code`) now also wires two Claude Code hooks into
+`.claude/settings.json`:
+
+- **`Stop` hook** — fires after every Claude turn. Reads the inbox
+  jsonl, finds messages received during the turn, and force-continues
+  Claude with them so the agent acks + handles them before yielding
+  back to you.
+- **`UserPromptSubmit` hook** — fires when you submit a terminal
+  prompt. Prepends any unread Telegram messages to the prompt as
+  additional context, so Claude sees the inbox alongside what you
+  just typed.
+
+Together: **as long as a Claude session is alive, every operator
+Telegram message gets a reply at the next turn boundary** — no
+polling loop needed. The hook also advances the consumed-pointer
+file atomically so messages aren't double-delivered.
+
+### Configuring inbox / consumed paths
+
+The defaults assume tether's native daemon (writes to
+`./tether_inbox.jsonl`, pointer at `./tether_inbox.consumed.json`).
+If your project already has a Telegram daemon writing to a different
+path (e.g. futures-bot's `state/telegram_inbox.jsonl`), pass them
+explicitly:
+
+```bash
+tether install claude-code \
+  --inbox-path state/telegram_inbox.jsonl \
+  --consumed-path state/telegram_inbox_consumed.json
+```
+
+The hook auto-detects two on-disk pointer formats:
+- `{"update_id": N}` — tether's native daemon
+- `{"line": N}` — line-count-based (custom daemons)
+
+### Opting out
+
+```bash
+tether install claude-code --no-hooks   # MCP only, no hooks
+```
+
+You can also pin to `settings.local.json` instead of the shared
+`settings.json` (useful when team members run different daemons):
+
+```bash
+tether install claude-code --settings-filename settings.local.json
+```
+
+### Important limitation
+
+Hooks only fire while a Claude Code session is alive. If you message
+your bot when **no Claude session is running**, nothing wakes it —
+the message just sits in the inbox until you start `claude` again
+(at which point the `UserPromptSubmit` hook drains it on your first
+prompt). For true 24/7 wake, run a `/loop` polling pattern alongside
+the hook, or invoke Claude from your runtime when a message arrives.
+
+The hook is the right answer for "Claude is running locally and the
+operator wants two-way comms" — which is the 90% case for
+agent-assisted dev.
+
 ## Comparison: v0.4 → v0.5 onboarding
 
 | Step                                | v0.4 (manual)                                     | v0.5 (wizard)                          |

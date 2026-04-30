@@ -141,6 +141,19 @@ def _cmd_init(args: argparse.Namespace) -> int:
         spec = _install.CLIENTS[client]
         print()
         print(f"Wrote {spec.name} MCP config: {written}")
+        # Claude Code: also wire turn-boundary inbox-drain hooks
+        # (uses default inbox/consumed paths — re-run `tether install
+        # claude-code --inbox-path X` if you have a custom daemon).
+        if client == "claude-code" and not args.no_hooks:
+            try:
+                hooks_path = _install.install_claude_code_hooks(
+                    project_root=Path.cwd(),
+                )
+            except SystemExit as e:
+                print(f"hook install failed: {e}", file=sys.stderr)
+                return 1
+            print(f"Wrote Claude Code hooks: {hooks_path}")
+            print("  (Stop + UserPromptSubmit auto-drain the Telegram inbox)")
         print(f"Restart {spec.name} to pick up the new server.")
         return 0
 
@@ -165,6 +178,11 @@ def _cmd_install(args: argparse.Namespace) -> int:
     Replaces the manual 'edit .claude/mcp.json' step. Locates the
     right config file for the chosen host, preserves any existing
     servers, adds (or replaces) the `tether` block.
+
+    For `claude-code`, also wires Stop + UserPromptSubmit hooks into
+    `.claude/settings.json` so the agent auto-drains the Telegram
+    inbox at turn boundaries (replacing manual polling). Use
+    `--no-hooks` to opt out.
     """
     profile_name = args.profile or _profiles.resolve_profile().name
     try:
@@ -178,6 +196,27 @@ def _cmd_install(args: argparse.Namespace) -> int:
     spec = _install.CLIENTS[args.client]
     print(f"Wrote {spec.name} MCP config: {written}")
     print(f"Profile pinned: {profile_name}")
+
+    # Claude Code only: optional turn-boundary hook installer.
+    if args.client == "claude-code" and not args.no_hooks:
+        try:
+            hooks_path = _install.install_claude_code_hooks(
+                project_root=Path.cwd(),
+                inbox_path=args.inbox_path,
+                consumed_path=args.consumed_path,
+                settings_filename=args.settings_filename,
+            )
+        except SystemExit as e:
+            print(f"hook install failed: {e}", file=sys.stderr)
+            return 1
+        print(f"Wrote Claude Code hooks: {hooks_path}")
+        print("  - Stop: drains Telegram inbox at end of turn "
+              "(force-continues if unread)")
+        print("  - UserPromptSubmit: prepends unread inbox messages "
+              "before each prompt")
+        print(f"  - inbox: {args.inbox_path}")
+        print(f"  - consumed: {args.consumed_path}")
+
     print(f"Restart {spec.name} to pick up the new server.")
     return 0
 
@@ -280,6 +319,11 @@ def main(argv: list[str] | None = None) -> int:
     p_init.add_argument("--inline-creds", action="store_true",
                         help="embed bot token + chat id in the host's MCP "
                              "config (default: pin TETHER_PROFILE only)")
+    p_init.add_argument(
+        "--no-hooks", action="store_true",
+        help="(--install claude-code) skip the Stop + UserPromptSubmit "
+             "inbox-drain hooks",
+    )
     p_init.set_defaults(func=_cmd_init)
 
     p_install = sub.add_parser(
@@ -296,6 +340,28 @@ def main(argv: list[str] | None = None) -> int:
         "--inline-creds", action="store_true",
         help="embed bot token + chat id in the host's MCP config "
              "(default: pin TETHER_PROFILE only)",
+    )
+    # Claude Code hooks (turn-boundary inbox drain).
+    p_install.add_argument(
+        "--no-hooks", action="store_true",
+        help="(claude-code) skip wiring the Stop + UserPromptSubmit "
+             "hooks that auto-drain the Telegram inbox",
+    )
+    p_install.add_argument(
+        "--inbox-path", default="tether_inbox.jsonl",
+        help="(claude-code) path the daemon writes inbound messages to "
+             "(default: tether_inbox.jsonl)",
+    )
+    p_install.add_argument(
+        "--consumed-path", default="tether_inbox.consumed.json",
+        help="(claude-code) path of the consumed-pointer json "
+             "(default: tether_inbox.consumed.json)",
+    )
+    p_install.add_argument(
+        "--settings-filename", default="settings.json",
+        choices=["settings.json", "settings.local.json"],
+        help="(claude-code) which settings file to write hooks to "
+             "(default: settings.json — shared across the team)",
     )
     p_install.set_defaults(func=_cmd_install)
 

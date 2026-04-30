@@ -284,3 +284,103 @@ def auto_detect_chat_id(bot_token: str, *, timeout_s: int = 60) -> int | None:
             if chat.get("type") == "private":
                 return int(chat["id"])
     return None
+
+
+# ---------------------------------------------------------------------------
+# Claude Code hooks installer — wires Stop + UserPromptSubmit hooks into
+# .claude/settings.json so the agent auto-drains the Telegram inbox at turn
+# boundaries.  Pairs with `tether.hooks.inbox_drain` script.
+# ---------------------------------------------------------------------------
+_TETHER_HOOK_MARKER = "tether.hooks.inbox_drain"
+
+
+def install_claude_code_hooks(
+    project_root: Path | str | None = None,
+    *,
+    inbox_path: str = "tether_inbox.jsonl",
+    consumed_path: str = "tether_inbox.consumed.json",
+    settings_filename: str = "settings.json",
+) -> Path:
+    """Wire Stop + UserPromptSubmit hooks into Claude Code settings.
+
+    Adds (or replaces) two hooks that run
+    `python -m tether.hooks.inbox_drain` to drain unread Telegram
+    messages at end-of-turn (Stop) and before the next user prompt
+    (UserPromptSubmit). Idempotent: re-runs replace any prior
+    tether-managed entries (identified by the command substring
+    `tether.hooks.inbox_drain`) and preserve unrelated hooks.
+
+    Args:
+        project_root: repo root; defaults to CWD. Hooks are written
+            relative to `<project_root>/.claude/<settings_filename>`.
+        inbox_path: path the daemon writes inbound messages to.
+            Relative paths are interpreted at hook-execution time
+            against the harness CWD (typically the project root).
+        consumed_path: path of the consumed-pointer json (advanced
+            by the hook so messages are not double-delivered).
+        settings_filename: 'settings.json' for shared, or
+            'settings.local.json' for per-machine overrides.
+
+    Returns the path written.
+    """
+    root = Path(project_root) if project_root else Path.cwd()
+    settings_path = root / ".claude" / settings_filename
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if settings_path.exists():
+        raw = settings_path.read_text(encoding="utf-8")
+        try:
+            data = json.loads(raw) if raw.strip() else {}
+        except json.JSONDecodeError as e:
+            raise SystemExit(
+                f"could not parse {settings_path}: {e}. "
+                "Fix the JSON manually and re-run, or pass a different "
+                "settings_filename."
+            )
+    else:
+        data = {}
+
+    if not isinstance(data.get("hooks"), dict):
+        data["hooks"] = {}
+    hooks_block: dict = data["hooks"]
+
+    py = Path(sys.executable).as_posix()  # forward slashes — bash-friendly
+    cmd_template = (
+        f'"{py}" -m tether.hooks.inbox_drain '
+        f'--event {{event}} '
+        f'--inbox "{inbox_path}" '
+        f'--consumed "{consumed_path}"'
+    )
+
+    for event in ("Stop", "UserPromptSubmit"):
+        existing = hooks_block.get(event, [])
+        kept_groups: list[dict] = []
+        if isinstance(existing, list):
+            for grp in existing:
+                if not isinstance(grp, dict):
+                    continue
+                grp_hooks = grp.get("hooks", [])
+                if not isinstance(grp_hooks, list):
+                    continue
+                kept_hooks = [
+                    h for h in grp_hooks
+                    if not (
+                        isinstance(h, dict)
+                        and _TETHER_HOOK_MARKER in str(h.get("command", ""))
+                    )
+                ]
+                if kept_hooks:
+                    new_grp = {**grp, "hooks": kept_hooks}
+                    kept_groups.append(new_grp)
+        kept_groups.append({
+            "hooks": [{
+                "type": "command",
+                "command": cmd_template.format(event=event),
+            }]
+        })
+        hooks_block[event] = kept_groups
+
+    tmp = settings_path.with_suffix(settings_path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(settings_path)
+    return settings_path
