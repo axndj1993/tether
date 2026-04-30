@@ -59,9 +59,12 @@ class _ClientSpec:
 def _claude_code_paths() -> list[Path]:
     """Project-local first, then user-global."""
     paths: list[Path] = []
-    cwd_local = Path.cwd() / ".claude" / "mcp.json"
+    # Project scope: Claude Code reads `.mcp.json` at the repo root
+    # (NOT `.claude/mcp.json` — that path is silently ignored).
+    cwd_local = Path.cwd() / ".mcp.json"
     paths.append(cwd_local)
-    paths.append(Path.home() / ".claude" / "mcp.json")
+    # User scope is stored inside `~/.claude.json` (large multi-key file),
+    # not as a standalone mcp.json — handle via `claude mcp add -s user`.
     return paths
 
 
