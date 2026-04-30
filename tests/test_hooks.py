@@ -14,7 +14,10 @@ from tether.hooks.inbox_drain import (
     main as inbox_drain_main,
     write_consumed_atomic,
 )
-from tether.install import install_claude_code_hooks
+from tether.install import (
+    install_claude_code_command,
+    install_claude_code_hooks,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -457,3 +460,60 @@ def test_install_hooks_preserves_unrelated_session_start_entry(
     ]
     assert "echo other" in cmds
     assert any("tether.hooks.inbox_drain" in c for c in cmds)
+
+
+# ---------------------------------------------------------------------------
+# install_claude_code_command — `/tether arm` slash command (v0.6.3+)
+# ---------------------------------------------------------------------------
+def test_install_command_writes_at_expected_path(tmp_path: Path) -> None:
+    written = install_claude_code_command(project_root=tmp_path)
+    assert written == tmp_path / ".claude" / "commands" / "tether.md"
+    assert written.exists()
+
+
+def test_install_command_body_contains_monitor_params(tmp_path: Path) -> None:
+    written = install_claude_code_command(
+        project_root=tmp_path,
+        inbox_path="state/telegram_inbox.jsonl",
+    )
+    body = written.read_text(encoding="utf-8")
+    # Frontmatter with description + argument-hint so Claude Code
+    # surfaces the command properly in autocomplete.
+    assert body.startswith("---\n")
+    assert "description:" in body
+    assert "argument-hint: arm" in body
+    # The body must instruct Claude to call the Monitor tool with the
+    # exact params Claude Code's harness expects.
+    assert "Monitor" in body
+    assert "tether.hooks.inbox_tail" in body
+    assert "state/telegram_inbox.jsonl" in body
+    assert "persistent" in body
+    assert "3600000" in body
+    # The Python interpreter path is baked in (forward slashes for
+    # bash-friendliness on Windows).
+    assert sys.executable.replace("\\", "/") in body
+    # $ARGUMENTS placeholder so /tether arm vs /tether status differ.
+    assert "$ARGUMENTS" in body
+
+
+def test_install_command_idempotent_overwrite(tmp_path: Path) -> None:
+    """Re-running with a different inbox path replaces the file."""
+    install_claude_code_command(
+        project_root=tmp_path, inbox_path="old.jsonl",
+    )
+    install_claude_code_command(
+        project_root=tmp_path, inbox_path="new.jsonl",
+    )
+    body = (tmp_path / ".claude" / "commands" / "tether.md").read_text(
+        encoding="utf-8"
+    )
+    assert "new.jsonl" in body
+    assert "old.jsonl" not in body
+
+
+def test_install_command_creates_parent_dirs(tmp_path: Path) -> None:
+    """Fresh repo with no .claude/ directory at all."""
+    deep = tmp_path / "fresh_repo"
+    written = install_claude_code_command(project_root=deep)
+    assert written.parent.is_dir()
+    assert written.exists()

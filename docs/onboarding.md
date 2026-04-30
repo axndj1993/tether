@@ -214,6 +214,36 @@ and only fills the idle window.
 `tether install claude-code` writes all three hook entries
 automatically. No extra flags required.
 
+#### Monitor tool parameters (auto-arm + manual fallback)
+
+The `SessionStart` hook delivers a directive; Claude itself must call
+the `Monitor` tool to actually arm the tail. The exact arguments:
+
+| Field         | Value                                                                       |
+|---------------|-----------------------------------------------------------------------------|
+| `command`     | `<python> -m tether.hooks.inbox_tail --inbox "<inbox-path>"`                |
+| `description` | `tether telegram inbox tail`                                                |
+| `persistent`  | `true`                                                                      |
+| `timeout_ms`  | `3600000` (ignored when `persistent: true`; harness still requires it)      |
+
+If you ever notice the Monitor didn't auto-arm (Telegram messages sent
+during idle don't reach Claude until you type), use the slash command:
+
+```
+/tether arm
+```
+
+v0.6.3+ ships this command — `tether install claude-code` writes
+`.claude/commands/tether.md` with the Monitor params baked in. Claude
+will dedup against any already-running Monitor before re-arming. To
+verify, ask *"is the tether Monitor running?"* — Claude Code tracks
+each `Monitor` by task id and will report status.
+
+See [integrations.md → Claude Code → Idle-wake
+Monitor](integrations.md#idle-wake-monitor-v061--auto-arm--manual-fallback)
+for the full reference, including how to pick the right Python
+interpreter path on Windows vs POSIX.
+
 ### Still a limitation: cold start
 
 If you message your bot when **no Claude session is running at all**,

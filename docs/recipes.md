@@ -176,3 +176,40 @@ def edit(new_text):
 edit("Step 2/3...")
 edit("Step 3/3 done ✅")
 ```
+
+## Recipe 9 — Manually arm the idle-wake Monitor in Claude Code
+
+`tether install claude-code` (v0.6.1+) writes a `SessionStart` hook
+that tells Claude to call its `Monitor` tool on a tail of the inbox
+JSONL — that's what makes Telegram messages wake Claude mid-idle.
+v0.6.2 hardens the directive to be unmissable, but if it ever slips,
+v0.6.3+ ships a slash command for the manual arm:
+
+```
+/tether arm
+```
+
+`tether install claude-code` writes `.claude/commands/tether.md` with
+the exact `Monitor` params baked in (Python interpreter path + inbox
+path are resolved at install time, so no operator typing required).
+The command body instructs Claude to dedup against any already-running
+Monitor before re-arming, so `/tether arm` is safe to invoke twice.
+
+Under the hood, the command tells Claude to call `Monitor` with:
+
+```jsonc
+{
+  "command":     "<python> -m tether.hooks.inbox_tail --inbox \"<inbox-path>\"",
+  "description": "tether telegram inbox tail",
+  "persistent":  true,
+  "timeout_ms":  3600000
+}
+```
+
+To verify a Monitor is already running, ask Claude:
+*"is the tether Monitor running?"* — Claude Code tracks each `Monitor`
+by task id and will report status.
+
+Cold start (no Claude session at all) is still a gap — the message
+sits in the inbox until you start `claude` next. v0.7's cold-start
+daemon ([ROADMAP](ROADMAP.md)) is the path to true 24/7 wake.

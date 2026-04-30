@@ -155,6 +155,17 @@ def _cmd_init(args: argparse.Namespace) -> int:
             print(f"Wrote Claude Code hooks: {hooks_path}")
             print("  (Stop + UserPromptSubmit auto-drain the inbox; "
                   "SessionStart arms Monitor for idle-wake)")
+        if client == "claude-code" and not args.no_command:
+            try:
+                cmd_path = _install.install_claude_code_command(
+                    project_root=Path.cwd(),
+                )
+            except SystemExit as e:
+                print(f"command install failed: {e}", file=sys.stderr)
+                return 1
+            print(f"Wrote Claude Code slash command: {cmd_path}")
+            print("  (use /tether arm in Claude to manually arm the "
+                  "idle-wake Monitor)")
         print(f"Restart {spec.name} to pick up the new server.")
         return 0
 
@@ -219,6 +230,20 @@ def _cmd_install(args: argparse.Namespace) -> int:
               "idle-wake (v0.6.1+)")
         print(f"  - inbox: {args.inbox_path}")
         print(f"  - consumed: {args.consumed_path}")
+
+    # Claude Code only: optional /tether arm slash command.
+    if args.client == "claude-code" and not args.no_command:
+        try:
+            cmd_path = _install.install_claude_code_command(
+                project_root=Path.cwd(),
+                inbox_path=args.inbox_path,
+            )
+        except SystemExit as e:
+            print(f"command install failed: {e}", file=sys.stderr)
+            return 1
+        print(f"Wrote Claude Code slash command: {cmd_path}")
+        print("  - /tether arm: manually arm the idle-wake Monitor "
+              "if the SessionStart hook auto-arm misses")
 
     print(f"Restart {spec.name} to pick up the new server.")
     return 0
@@ -327,6 +352,10 @@ def main(argv: list[str] | None = None) -> int:
         help="(--install claude-code) skip the Stop + UserPromptSubmit "
              "inbox-drain hooks",
     )
+    p_init.add_argument(
+        "--no-command", action="store_true",
+        help="(--install claude-code) skip the /tether arm slash command",
+    )
     p_init.set_defaults(func=_cmd_init)
 
     p_install = sub.add_parser(
@@ -365,6 +394,10 @@ def main(argv: list[str] | None = None) -> int:
         choices=["settings.json", "settings.local.json"],
         help="(claude-code) which settings file to write hooks to "
              "(default: settings.json — shared across the team)",
+    )
+    p_install.add_argument(
+        "--no-command", action="store_true",
+        help="(claude-code) skip the /tether arm slash command",
     )
     p_install.set_defaults(func=_cmd_install)
 

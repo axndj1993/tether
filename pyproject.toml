@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tether"
-version = "0.6.2"
+version = "0.6.3"
 description = "Bidirectional comms for AI agents (Telegram + Slack, multi-profile, MCP-native). Your agent calls you, you can call back."
 readme = "README.md"
 license = {text = "MIT"}

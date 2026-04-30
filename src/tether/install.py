@@ -387,3 +387,71 @@ def install_claude_code_hooks(
     tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     tmp.replace(settings_path)
     return settings_path
+
+
+# ---------------------------------------------------------------------------
+# Claude Code slash command — `/tether arm` manual fallback for the
+# SessionStart-hook-driven Monitor auto-arm.  Pairs with the hooks above.
+# ---------------------------------------------------------------------------
+_CLAUDE_CODE_COMMAND_TEMPLATE = """\
+---
+description: Manage tether (Telegram bridge to operator). Subcommand 'arm' starts the idle-wake Monitor.
+argument-hint: arm
+---
+
+The operator typed `/tether $ARGUMENTS`. Handle the subcommand:
+
+## `arm`
+
+Invoke the `Monitor` tool with these exact parameters (do not modify):
+
+- `command`: `"{python}" -m tether.hooks.inbox_tail --inbox "{inbox_path}"`
+- `description`: `tether telegram inbox tail`
+- `persistent`: `true`
+- `timeout_ms`: `3600000`
+
+This starts a long-running tail of the Telegram inbox JSONL. Each new line becomes a stdout event that wakes the session mid-idle, so operator messages arriving while you're waiting for input reach you in sub-second time.
+
+Before arming, check whether an identical `Monitor` is already running for this session (use `TaskList` if needed). If yes, report the existing task id and skip — do not double-arm. Otherwise, arm and confirm in one short line with the new task id.
+
+## anything else
+
+If `$ARGUMENTS` is empty or not `arm`, list the available subcommand and stop. Currently only `arm` is implemented.
+"""
+
+
+def install_claude_code_command(
+    project_root: Path | str | None = None,
+    *,
+    inbox_path: str = "tether_inbox.jsonl",
+) -> Path:
+    """Write `.claude/commands/tether.md` for the `/tether` slash command.
+
+    Lets the operator manually arm the idle-wake Monitor with
+    `/tether arm` if the v0.6.1+ SessionStart auto-arm misses (e.g.
+    Claude treats the directive as informational and waits to be
+    reminded).  The command body bakes in the Python interpreter +
+    inbox path so Claude's `Monitor` invocation is fully determined.
+
+    Idempotent: the file is owned by tether and re-runs overwrite it.
+
+    Args:
+        project_root: repo root; defaults to CWD.
+        inbox_path: path the daemon writes inbound messages to. Should
+            match whatever was passed to `install_claude_code_hooks`
+            (otherwise `/tether arm` will tail a different file than
+            the one `Stop`/`UserPromptSubmit` drain).
+
+    Returns the path written.
+    """
+    root = Path(project_root) if project_root else Path.cwd()
+    cmd_path = root / ".claude" / "commands" / "tether.md"
+    cmd_path.parent.mkdir(parents=True, exist_ok=True)
+
+    py = Path(sys.executable).as_posix()
+    body = _CLAUDE_CODE_COMMAND_TEMPLATE.format(python=py, inbox_path=inbox_path)
+
+    tmp = cmd_path.with_suffix(cmd_path.suffix + ".tmp")
+    tmp.write_text(body, encoding="utf-8")
+    tmp.replace(cmd_path)
+    return cmd_path

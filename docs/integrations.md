@@ -61,6 +61,61 @@ Now whenever Claude is doing operator-facing work, it'll proactively
 emit status updates via `tether_send` and ack inbound messages
 before working.
 
+### Idle-wake Monitor (v0.6.1+) — auto-arm + manual fallback
+
+`tether install claude-code` writes a `SessionStart` hook that tells
+Claude to invoke its `Monitor` tool on a background tail of your inbox
+JSONL. While the Monitor is armed, every Telegram message lights up
+mid-idle as a stdout event — sub-second wake, even when Claude is just
+sitting waiting for you to type.
+
+> **The hook delivers a directive; Claude executes it.** A shell hook
+> cannot call the `Monitor` tool — only the Claude session can. v0.6.2
+> hardens the directive wording to `MANDATORY FIRST ACTION`, which
+> makes auto-arm reliable in practice, but if Claude ever skips it
+> (i.e. you message during idle and get no response until you type),
+> use the slash command:
+>
+> ```
+> /tether arm
+> ```
+>
+> v0.6.3+ ships this command — `tether install claude-code` writes
+> `.claude/commands/tether.md` with the exact `Monitor` params (Python
+> interpreter path + inbox path) baked in at install time. The
+> command body tells Claude to dedup against any already-running
+> Monitor before re-arming.
+
+The parameters Claude should pass to its `Monitor` tool:
+
+| Field         | Value                                                                       |
+|---------------|-----------------------------------------------------------------------------|
+| `command`     | `<python> -m tether.hooks.inbox_tail --inbox "<inbox-path>"`                |
+| `description` | `tether telegram inbox tail`                                                |
+| `persistent`  | `true`                                                                      |
+| `timeout_ms`  | `3600000` (ignored when `persistent: true`; harness requires the field)     |
+
+- `<python>` — the interpreter that has `tether` importable (same one
+  `tether-mcp` runs under). Windows: typically
+  `C:/Users/<you>/AppData/Local/Programs/Python/Python3xx/python.exe`.
+  POSIX: absolute path from `which python` or your venv.
+- `<inbox-path>` — the JSONL your inbox daemon writes to. Defaults to
+  `./tether_inbox.jsonl`; projects with their own daemon set it
+  explicitly (e.g. `state/telegram_inbox.jsonl` in futures-bot). Match
+  whatever you passed to `tether install claude-code --inbox-path ...`.
+
+**Verify the Monitor is armed.** Ask Claude *"is the tether Monitor
+running?"* — Claude Code tracks each `Monitor` invocation by task id
+(e.g. `brc1jitnm`) and will report whether one is active for the
+inbox tail.
+
+**Cold start is still a gap.** If you message the bot while no Claude
+session is running, the message sits in the inbox until you start
+`claude` next — at which point `UserPromptSubmit` drains it on your
+first prompt and `SessionStart` re-arms the Monitor for the new
+session's idle window. True 24/7 wake requires the v0.7 cold-start
+daemon — see [ROADMAP](ROADMAP.md).
+
 ## Cursor
 
 **Config file:** `~/.cursor/mcp.json` (global) or
