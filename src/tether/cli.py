@@ -153,7 +153,8 @@ def _cmd_init(args: argparse.Namespace) -> int:
                 print(f"hook install failed: {e}", file=sys.stderr)
                 return 1
             print(f"Wrote Claude Code hooks: {hooks_path}")
-            print("  (Stop + UserPromptSubmit auto-drain the Telegram inbox)")
+            print("  (Stop + UserPromptSubmit auto-drain the inbox; "
+                  "SessionStart arms Monitor for idle-wake)")
         print(f"Restart {spec.name} to pick up the new server.")
         return 0
 
@@ -214,6 +215,8 @@ def _cmd_install(args: argparse.Namespace) -> int:
               "(force-continues if unread)")
         print("  - UserPromptSubmit: prepends unread inbox messages "
               "before each prompt")
+        print("  - SessionStart: arms Monitor on inbox_tail for "
+              "idle-wake (v0.6.1+)")
         print(f"  - inbox: {args.inbox_path}")
         print(f"  - consumed: {args.consumed_path}")
 
